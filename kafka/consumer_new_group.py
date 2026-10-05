@@ -1,19 +1,18 @@
 from kafka import KafkaConsumer
 
-#connessione al broker Kafka
-consumer = KafkaConsumer(   #crea un consumer stream-based
-    'test_topic_multi', #si iscrive al topic legge eventi dal log Kafka.
-
+# Connect to the Kafka broker
+consumer = KafkaConsumer(
+    'test_topic_persistence',
     bootstrap_servers='localhost:9092',
-
     auto_offset_reset='earliest',
-
-    group_id='test-group-new' #kafka usa consumer group
+    group_id='persistence-test-group-2'
 )
 
 print("Connected to Kafka")
 
-#ascolto continuo dei messaggi
+# Continuously listen for messages
 for message in consumer:
-
-    print(f"Received: {message.value.decode()}")
+    print(
+        f"Received: {message.value.decode()} "
+        f"(Offset: {message.offset})"
+    )

@@ -2,10 +2,10 @@ from kafka import KafkaConsumer
 import time
 
 consumer = KafkaConsumer(
-    'test_topic_multi',
+    'test_topic_consumer_recovery',
     bootstrap_servers='localhost:9092',
     auto_offset_reset='earliest',
-    group_id='manual-commit-group',
+    group_id='consumer-recovery-group',
     enable_auto_commit=False
 )
 
