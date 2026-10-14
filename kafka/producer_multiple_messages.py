@@ -24,5 +24,3 @@ for message in messages:
 producer.flush()
 producer.close()
 
-# rappresenta il componente che genera eventi
-# punto di ingresso dei messaggi nel sistema distribuito

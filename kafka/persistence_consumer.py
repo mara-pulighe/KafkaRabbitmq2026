@@ -10,7 +10,7 @@ consumer = KafkaConsumer(
 
 print("Connected to Kafka")
 
-# Continuously listen for messages
+# Continuously consume messages from the topic
 for message in consumer:
     print(
         f"Received: {message.value.decode()} "

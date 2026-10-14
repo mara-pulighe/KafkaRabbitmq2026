@@ -2,10 +2,11 @@ import pika
 
 connection = pika.BlockingConnection(
     pika.ConnectionParameters('localhost')
-)  # connettiti a RabbitMQ
+) 
 
-channel = connection.channel()  # crea un canale di comunicazione
+channel = connection.channel()  
 
+# Declare a durable queue that survives broker restarts
 channel.queue_declare(
     queue='test_queue_durable',
     durable=True
@@ -26,13 +27,10 @@ for message in messages:
         routing_key='test_queue_durable',
         body=message,
         properties=pika.BasicProperties(
-            delivery_mode=2  # rende persistente il messaggio
+            delivery_mode=2  # Mark the message as persistent
         )
     )
 
     print(f"Sent: {message}")
 
 connection.close()
-
-# rappresenta il componente che genera eventi
-# punto di ingresso dei messaggi nel sistema distribuito

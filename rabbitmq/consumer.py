@@ -1,28 +1,28 @@
 import pika
 
-connection = pika.BlockingConnection( #sincrono bloccante 
+connection = pika.BlockingConnection( 
     pika.ConnectionParameters('localhost')
-)#connettiti a RabbitMQ che gira sul mio computer
+)
 
-channel = connection.channel() #crea un canale di comunicazione
+channel = connection.channel() # Create a communication channel
 
-channel.queue_declare(queue='test_queue')#crea una queue chiamata test_queue se non esiste
+channel.queue_declare(queue='test_queue')# Declare the queue; create it if it does not already exist
 
-#codice che verrà eseguito quando arriva un messaggio 
-def callback(ch, method, properties, body):#ch è canale
-    print(f"Received: {body.decode()}") #perchè rabbit manda bytes
+# Define the callback function executed when a message is received
+def callback(ch, method, properties, body):
+    print(f"Received: {body.decode()}") # Decode the message payload from bytes to a string
 
-#per restare in ascolto 
+# Register the consumer to receive messages from the queue
 channel.basic_consume(
-    queue='test_queue', #quale queue ascoltare
+    queue='test_queue', # Specify the queue to consume from
     on_message_callback=callback,
-    auto_ack=True  #Il consumer dice a RabbitMQ “messaggio ricevuto correttamente”
+    auto_ack=True  # Automatically acknowledge each message upon delivery
 )
 
 print("Waiting for messages...")
 
-channel.start_consuming() #blocca il programma e lo lascia in attesa permanente
+channel.start_consuming() 
 
 
 
-#è il componente che: legge i messaggi e li processa
+# Consumer component: receives and processes messages from the queue

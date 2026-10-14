@@ -8,6 +8,7 @@ channel = connection.channel()
 
 channel.queue_declare(queue='test_queue')
 
+# Define a list of messages to publish
 messages = [
     "Message 1",
     "Message 2",
@@ -28,4 +29,4 @@ for message in messages:
 
 connection.close()
 
-#in questo caso il producer genera più eventi e il consumer processa sequenzialmente 
+# The producer publishes multiple messages, which the consumer can process sequentially

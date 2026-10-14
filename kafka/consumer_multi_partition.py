@@ -1,14 +1,14 @@
 from kafka import KafkaConsumer
 
-#connessione al broker Kafka
-consumer = KafkaConsumer(   #crea un consumer stream-based
-    'test_topic_multi', #si iscrive al topic legge eventi dal log Kafka.
+
+consumer = KafkaConsumer(   
+    'test_topic_multi', 
 
     bootstrap_servers='localhost:9092',
 
     auto_offset_reset='earliest',
 
-    group_id='test-group' #kafka usa consumer group
+    group_id='test-group' 
 )
 
 print("Connected to Kafka")

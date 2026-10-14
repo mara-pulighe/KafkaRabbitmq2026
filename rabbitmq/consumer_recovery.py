@@ -14,18 +14,18 @@ channel.queue_declare(
 def callback(ch, method, properties, body):
 
     print(f"Received: {body.decode()}")
-
+# Simulate a long-running message-processing task
     print("Simulating long processing...")
     time.sleep(30)
 
     print("Processing completed")
-
+# Acknowledge the message only after processing is complete
     ch.basic_ack(
         delivery_tag=method.delivery_tag
     )
 
     print("ACK sent")
-
+# Register the consumer with manual message acknowledgements
 channel.basic_consume(
     queue='test_queue_recovery',
     on_message_callback=callback,
@@ -36,4 +36,3 @@ print("Waiting for messages...")
 
 channel.start_consuming()
 
-# legge i messaggi e li processa

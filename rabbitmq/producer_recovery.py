@@ -22,5 +22,3 @@ print(f"Sent: {message}")
 
 connection.close()
 
-# rappresenta il componente che genera eventi
-# punto di ingresso dei messaggi nel sistema distribuito

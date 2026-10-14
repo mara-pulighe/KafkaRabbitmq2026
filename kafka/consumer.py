@@ -1,19 +1,19 @@
 from kafka import KafkaConsumer
 
-#connessione al broker Kafka
-consumer = KafkaConsumer(   #crea un consumer stream-based
-    'test_topic', #si iscrive al topic legge eventi dal log Kafka.
+
+consumer = KafkaConsumer(   
+    'test_topic', # Subscribe to the topic and read events from its log
 
     bootstrap_servers='localhost:9092',
 
-    auto_offset_reset='earliest',
+    auto_offset_reset='earliest', # Start from the earliest available offset if no valid offset is committed
 
-    group_id='test-group' #kafka usa consumer group
+    group_id='test-group' # Identify the consumer group
 )
 
 print("Connected to Kafka")
 
-#ascolto continuo dei messaggi
+
 for message in consumer:
 
     print(f"Received: {message.value.decode()}")
