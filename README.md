@@ -35,19 +35,19 @@ Requirements
 
 Before running the experiments, make sure the following software is installed:
 
-Docker
+-Docker
 
-Docker Compose
+-Docker Compose
 
-Python 3
+-Python 3
 
-pip
+-pip
 
 The Python clients use the following libraries:
 
-kafka-python for Apache Kafka
+-kafka-python for Apache Kafka
 
-pika for RabbitMQ
+-pika for RabbitMQ
 
 
 The RabbitMQ management interface can be used to inspect queues, messages, consumers, and broker status. Kafka is inspected through command-line tools.
@@ -56,37 +56,37 @@ Experiments
 
 The project includes experiments covering the following aspects:
 
-RabbitMQ
+1.RabbitMQ
 
-Basic producer–consumer communication
+2.Basic producer–consumer communication
 
-Asynchronous message delivery
+3.Asynchronous message delivery
 
-Multiple messages
+4.Multiple messages
 
-Competing consumers
+5.Competing consumers
 
-Durable queues and persistent messages
+6.Durable queues and persistent messages
 
-Message redelivery after consumer interruption
+7.Message redelivery after consumer interruption
 
-Apache Kafka
+8.Apache Kafka
 
-Basic producer–consumer communication
+9.Basic producer–consumer communication
 
-Multiple messages
+10.Multiple messages
 
-Multiple consumers with a single partition
+11.Multiple consumers with a single partition
 
-Multiple consumers with multiple partitions
+12.Multiple consumers with multiple partitions
 
-Event persistence and consumer offsets
+13.Event persistence and consumer offsets
 
-Event replay
+14.Event replay
 
-Broker restart persistence
+15.Broker restart persistence
 
-Consumer failure recovery
+16.Consumer failure recovery
 
 The experiments are intended to examine functional behavior and messaging mechanisms. They do not constitute a quantitative throughput or latency benchmark.
 
