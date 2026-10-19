@@ -17,6 +17,7 @@ This directory contains the procedures used to reproduce all experiments discuss
 - K2 – Multiple Messages
 - K3 – Multiple Consumers (Single Partition)
 - K4 – Multiple Consumers with Multiple Partitions
-- K5 – Event Replay
+- K5 - Event Persistence and Consumer Offsets
+- K6 – Event Replay
 - K6 – Broker Restart Persistence
-- K7 – Consumer Recovery
+- K7 – Consumer Failure Recovery

@@ -1,0 +1,1218 @@
+\documentclass{scrartcl}
+\usepackage[utf8]{inputenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{natbib}
+\usepackage{graphicx}
+\usepackage{cleveref} % this must be the last package to be loaded
+
+\newcommand{\emailaddr}[1]{\href{mailto:#1}{\texttt{#1}}}
+
+\title{\LARGE
+    Event-Driven Architectures in Distributed Systems: A Comparative Study of Apache Kafka and RabbitMQ
+}
+\subtitle{Final Report for the Distributed Systems Course [2025/2026]}
+
+
+\author{
+    Mara Pulighe\\ \emailaddr{mara.pulighe@studio.unibo.it}
+}
+
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+
+Modern distributed systems require efficient mechanisms for exchanging information between independent components. To support scalability, reliability, and loose coupling, many architectures rely on messaging technologies that enable asynchronous communication. Among the most widely adopted messaging technologies, RabbitMQ and Apache Kafka represent two different approaches to distributed communication, based respectively on queue-oriented messaging and event streaming.
+
+This project presents a comparative study of RabbitMQ and Apache Kafka within the context of event-driven distributed systems. The objective of the study is to investigate and compare the communication models, persistence mechanisms, scalability characteristics through parallel message processing and partitioning, and recovery strategies provided by the two technologies.
+
+
+The analysis combines theoretical discussion with practical experimentation. A lightweight experimental environment was developed using Docker, Docker Compose, Python, RabbitMQ, and Apache Kafka in order to reproduce and observe several distributed-system behaviours. The experimental activities focus on message delivery, persistence, consumer recovery, event replay, consumer groups, and partition-based parallelism.
+
+The study aims to highlight the similarities and differences between the two technologies and to provide a structured framework for understanding their respective strengths, limitations, and areas of applicability. By combining conceptual analysis and practical observations, the project seeks to provide developers, architects, and students with a clearer understanding of the operational differences between RabbitMQ and Kafka and of the distributed-system concepts underlying their design.
+
+\end{abstract}
+
+\section{Background}
+\subsection{Distributed Systems}
+
+According to Coulouris et al. \textbf{\cite{coulouris2011}}, distributed systems is a collection of components located on networked computers that communicate and coordinate their actions exclusively through message passing. Unlike centralized systems, computation and data are distributed across multiple independent nodes that cooperate to achieve common objectives.
+
+This definition highlights several fundamental characteristics of distributed systems. First, multiple components may operate concurrently, executing tasks independently while interacting through communication mechanisms. Second, distributed systems do not possess a global clock, making it difficult to establish a single notion of time across all components. Third, failures may occur independently: a component may stop functioning while the remainder of the system continues to operate.
+
+The construction of distributed systems is motivated primarily by the need for resource sharing. Computing resources, services, and data can be made accessible to multiple users and applications regardless of their physical location. Distributed systems face several fundamental challenges, including scalability, fault tolerance, effective coordination among components, and reliable communication, which become increasingly important as applications grow in size and complexity.
+
+RabbitMQ and Apache Kafka, which are analysed throughout this project, represent two widely adopted technologies designed to support communication in distributed environments.
+
+\subsection{Relevant Distributed-System Challenges}
+
+Among the challenges identified by Coulouris et al. \cite{coulouris2011}, some are particularly relevant to the analysis conducted in this project.
+
+\paragraph{Scalability}
+
+Scalability refers to the ability of a system to handle increasing workloads as the number of users, resources, or exchanged messages grows. As distributed applications grow, communication infrastructures must provide mechanisms for processing increasing workloads. In this project, scalability is explored through experiments involving multiple consumers and workload distribution mechanisms in both RabbitMQ and Apache Kafka.
+
+\paragraph{Failure Handling}
+
+Failures are inevitable in distributed environments because individual
+components may fail independently while the remainder of the system continues to
+operate. Distributed systems therefore require mechanisms that support fault detection,
+recovery, and continued operation in the presence of failures. In this project,
+message persistence, broker recovery, consumer recovery, and message redelivery
+are particularly relevant aspects of failure handling and are examined through
+dedicated experiments.
+
+\paragraph{Concurrency}
+
+Distributed systems typically allow multiple components to operate concurrently and access shared resources simultaneously. As a consequence, communication infrastructures must coordinate message delivery and workload distribution among concurrent consumers. Both RabbitMQ and Apache Kafka support concurrent message processing through different mechanisms, including competing consumers, consumer groups, and partition-based processing.
+
+\paragraph{Openness}
+
+Open distributed systems are designed to facilitate the integration of components developed using different technologies and platforms. RabbitMQ and Apache Kafka both provide well-documented interfaces, support multiple programming languages, and can operate within heterogeneous software environments. 
+
+\subsection{Communication Models}
+
+Communication is a fundamental aspect of distributed systems, since independent components must exchange information in order to coordinate their activities. One common approach is based on service-oriented communication, where clients send requests to servers and wait for a response. Typical examples include RESTful services and Remote Procedure Call (RPC) frameworks.
+
+In synchronous communication models, the sender depends on the availability and responsiveness of the receiver. While this approach simplifies interactions, it introduces a strong coupling between communicating components. Network delays, service unavailability, or temporary failures may directly affect application behaviour.
+
+As observed by Kleppmann \cite{kleppmann2017}, network communication differs significantly from local procedure calls. Unlike local function invocations, network requests may experience unpredictable latency, communication failures, message loss, or temporary unavailability of remote services. These characteristics make distributed communication inherently more complex and less reliable than communication within a single process.
+
+To reduce these limitations, many distributed systems adopt asynchronous communication mechanisms. In this model, a sender transmits a message without waiting for the receiver to process it immediately. Messages can be temporarily stored and delivered when the receiving component becomes available. This approach reduces temporal dependencies between system components and improves resilience in the presence of failures or workload fluctuations.
+
+The widespread adoption of asynchronous communication has led to the development of messaging systems and message brokers, which provide intermediary infrastructures responsible for storing, routing, and delivering messages between distributed components. These technologies constitute a fundamental building block of modern event-driven architectures.
+
+\subsection{Messaging Systems}
+
+Messaging systems are software infrastructures designed to support asynchronous communication between distributed components through the exchange of messages. Instead of communicating directly, applications interact through an intermediary component known as a message broker, which is responsible for receiving, storing, routing, and delivering messages.
+
+According to Kleppmann \textbf{\cite{kleppmann2017},} message-passing systems can be viewed as an intermediate approach between direct service communication and persistent storage. Messages can be exchanged with relatively low latency, while the messaging infrastructure can temporarily store them until they are processed by the receiving component.
+
+A messaging system typically involves three main entities:
+
+\begin{itemize}
+\item \textbf{Producers}, which generate and publish messages;
+\item \textbf{Consumers}, which receive and process messages;
+\item \textbf{Message brokers}, which manage message storage and delivery.
+\end{itemize}
+
+The broker acts as an intermediary between producers and consumers. Messages are published to a logical destination, such as a queue or a topic, and are subsequently delivered to one or more consumers according to the communication model adopted by the messaging platform.
+
+The introduction of a broker offers several advantages compared to direct communication between distributed components. Messages can be temporarily buffered when consumers are unavailable, reducing the risk of data loss. Delivery mechanisms can automatically retry failed transmissions, improving reliability and fault tolerance. Furthermore, producers are not required to know the physical location or implementation details of consumers, which promotes loose coupling and simplifies system evolution.
+
+Messaging systems also support different communication patterns. In point-to-point communication, messages are delivered to a single consumer, typically through queues. In publish--subscribe communication, messages can be distributed to multiple consumers interested in the same information stream. These patterns allow messaging infrastructures to support a wide range of distributed-system architectures.
+
+Because of their ability to provide asynchronous communication, reliability, and component decoupling, messaging systems have become a fundamental element of modern distributed applications, particularly within microservices, cloud platforms, and event-driven architectures.
+
+\subsection{Event-Driven Architectures}
+
+Traditional distributed applications are commonly implemented using synchronous request--response communication models. In this approach, a client sends a request to a remote service and waits for a response before continuing execution. Technologies such as REST APIs and Remote Procedure Calls (RPC) are widely adopted because they closely resemble the procedural programming model used in software development.
+
+While synchronous communication is intuitive and effective for many applications, it becomes increasingly challenging as the number of services grows. Dependencies between services create complex communication chains, where the availability and responsiveness of one component may directly affect many others. In large-scale distributed environments, failures and performance degradations can propagate through these dependencies, reducing overall system resilience.
+
+To address these limitations, modern distributed systems increasingly adopt asynchronous communication models. Instead of directly invoking operations on remote services, components communicate by exchanging messages through an intermediary messaging infrastructure. This approach reduces temporal dependencies between services and allows them to evolve and operate more independently.
+
+Event-driven architectures represent one of the most widely adopted forms of asynchronous communication. In this model, services communicate through events that describe something that has occurred within the system. Rather than explicitly requesting actions from other components, a service publishes events and allows interested consumers to react to them independently. This approach promotes loose coupling, scalability, and resilience, making it particularly suitable for modern distributed systems.
+
+\subsection{RabbitMQ}
+
+RabbitMQ is a \textit{message-oriented middleware} (MOM) system, a message broker designed to enable asynchronous communication between distributed applications. It implements the \textit{Advanced Message Queuing Protocol} (AMQP) and acts as an intermediary between producers and consumers, allowing the software components involved in the exchange of information to remain decoupled. Developed in Erlang and based on the \textit{Open Telecom Platform} (OTP) framework, RabbitMQ provides advanced features for managing distributed systems and high-availability configurations.
+
+The main purpose of a message broker is to receive messages from sending applications, manage their routing, and deliver them to the appropriate recipients. Through this approach, applications do not need to directly know the identity, location, or operational status of the components with which they communicate, reducing the coupling between system components and improving scalability and maintainability. In addition, RabbitMQ provides mechanisms for message persistence and reliable delivery, making it suitable for scenarios where information must be preserved even in the presence of temporary failures.
+
+The RabbitMQ architecture is based on four main components:
+
+\begin{itemize}
+    \item \textbf{Producer}: an application that generates and publishes messages;
+    \item \textbf{Exchange}: a component that receives messages and determines how they should be routed;
+    \item \textbf{Queue}: a structure that temporarily stores messages until they are processed;
+    \item \textbf{Consumer}: an application that receives and processes messages from queues.
+\end{itemize}
+
+Unlike traditional models based exclusively on FIFO queues, RabbitMQ introduces the concept of an \textit{Exchange}, a component responsible for routing messages to one or more queues. 
+
+Producers therefore do not send messages directly to queues, but publish them to an Exchange, which determines how they should be distributed according to routing rules defined through \textit{bindings} and \textit{routing keys}. This model allows different \textit{publish/subscribe} communication patterns to be implemented and enables the broker's behaviour to be adapted to the requirements of the application.
+
+RabbitMQ supports several types of Exchanges, including:
+
+\begin{itemize}
+    \item \textbf{Fanout Exchange}: forwards each message to all queues
+connected to the exchange, implementing a broadcast mechanism;
+    
+    \item \textbf{Direct Exchange}: delivers messages only to queues whose \textit{binding key} exactly matches the message's \textit{routing key};
+    
+    \item \textbf{Topic Exchange}: provides more flexible routing through the use of patterns and wildcard characters, allowing messages to be selectively distributed according to the structure of the routing key.
+\end{itemize}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Types of exchanges.png}
+    \caption{Message Routing in RabbitMQ.  Source: CloudAMQP~\cite{cloudamqp-rabbitmq-beginners}}
+    \label{fig:architecture}
+\end{figure}
+
+Thanks to these features, RabbitMQ is widely used for building distributed systems based on asynchronous messaging. It is particularly common in service-oriented and microservice architectures, where independent components need to communicate while maintaining high levels of reliability, flexibility, and loose coupling.
+
+\subsection{Apache Kafka}
+
+Apache Kafka is a distributed platform for managing and processing real-time data streams (\textit{data streaming}). Originally developed at LinkedIn and later released as an open-source project under the Apache Software Foundation, Kafka enables the collection, storage, and processing of large volumes of continuously generated data originating from applications, services, and distributed devices.
+
+The main functionalities provided by Kafka can be summarized in three fundamental operations:
+
+\begin{itemize}
+\item publishing and subscribing to data streams (\textit{publish/subscribe});
+\item persistently storing data;
+\item processing data streams in real time.
+\end{itemize}
+
+Kafka's architecture is composed of several key components:
+
+\begin{itemize}
+\item \textbf{Producer}: an application that publishes events or messages to topics;
+\item \textbf{Broker}: a Kafka server responsible for storing and serving the events belonging to the topics managed by the cluster;
+\item \textbf{Topic}: a logical category used to organize streams of events;
+\item \textbf{Consumer}: an application that reads and processes events published to topics.
+\end{itemize}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{partitions.png}
+    \caption{Kafka topic partitioning and message distribution.  Source: Apache Kafka Documentation~\cite{kafka-docs}.}
+    \label{fig:architecture}
+\end{figure}
+
+In addition to the functionalities commonly provided by messaging systems, Kafka also incorporates highly scalable distributed storage mechanisms. Data is maintained within structures known as \textit{topics}, which represent logical streams of events. Each topic is divided into multiple \textit{partitions}, allowing workloads to be distributed across several cluster nodes and enabling parallel processing.
+
+Kafka's architecture is based on the concept of a distributed log. Messages are recorded sequentially within partitions and retained for a configurable period of time, regardless of whether they have already been consumed. This approach allows multiple applications to access the same data at different times while preserving event ordering and ensuring high reliability.
+
+Kafka provides APIs that allow applications to interact with the platform.
+The two most relevant for this project are the Producer API, used to publish
+events to topics, and the Consumer API, used to read and process events from
+topics. Kafka also provides additional APIs, such as the Streams API for stream
+processing and the Connect API for integration with external systems.
+
+By combining messaging, persistent storage, and \textit{stream processing} capabilities, Kafka has become one of the most widely adopted technologies for building data pipelines, \textit{event-driven} systems, and real-time analytics platforms. These characteristics make it particularly suitable for scenarios requiring high scalability, fault tolerance, and efficient management of large volumes of data.
+
+
+\section{Concept}\label{concept}
+
+This project investigates the role of messaging infrastructures in distributed systems through a comparative analysis of RabbitMQ and Apache Kafka.
+
+Both technologies support asynchronous communication between distributed components, but they adopt different architectural approaches and operational models. The study examines how these differences influence message delivery, persistence, scalability, and recovery mechanisms.
+
+To support the analysis, a series of practical experiments was conducted within a containerized environment based on Docker, RabbitMQ, Kafka, and Python applications.
+
+\subsection{Type of Product}
+
+The project is a technical and experimental study of RabbitMQ and Apache Kafka.
+
+Its purpose is not to develop a production-ready application, but to analyse and compare two distributed messaging technologies through theoretical discussion and practical experimentation.
+
+The resulting artifact consists of a reproducible experimental environment and a structured analysis of the observed behaviours of both platforms.
+
+\subsection{Use Case Description}
+
+The intended users of this project include computer science students, software engineers, and system architects interested in distributed systems and messaging technologies.
+
+The interaction is not continuous, as would be expected for a traditional software application. Instead, users interact with the project through the technical report and the accompanying experimental environment, using them as learning and evaluation resources when studying distributed messaging systems or investigating specific messaging behaviours.
+
+The experimental activities focus on concepts such as asynchronous communication, message persistence, consumer recovery, event replay, consumer groups, and partition-based parallelism. These experiments complement the theoretical discussion bby providing practical observations of the operational characteristics of the two
+technologies.
+
+\subsection{Data Storage}
+
+The project does not manage application-specific or user-generated data in the traditional sense. Since the primary objective is the comparative analysis of distributed messaging technologies, data is used exclusively to support the experimental activities described throughout the report.
+
+The experimental environment generates and exchanges synthetic messages that simulate communication between distributed components. These messages are temporarily stored by the messaging infrastructure in accordance with the mechanisms provided by the selected technology.
+
+The persistence and storage of messages are themselves relevant subjects of the study, as RabbitMQ and Apache Kafka adopt different approaches to message retention and recovery. For this reason, message storage is analysed as part of the comparison rather than as an application requirement.
+
+No personal information, business data, or long-term application state is collected, processed, or permanently maintained during the execution of the experiments.
+
+
+\subsection{Scope of Analysis}
+
+The analysis is limited to the features and mechanisms that are examined through the
+implemented experiments. Advanced topics such as multi-node deployments, large-scale
+performance benchmarking, and production-grade security configurations are considered
+outside the scope of the project.
+
+
+\subsection{Why Distribution is Needed}
+
+Distribution represents the central theme of this project because both RabbitMQ and Apache Kafka were designed to support communication among independent components operating within distributed environments.
+
+ Messaging technologies address this requirement by introducing an intermediary communication layer that decouples message producers from message consumers, allowing each component to operate independently and evolve separately.
+
+The distributed-system properties investigated throughout this study include:
+
+\begin{itemize}
+\item \textbf{Asynchronous Communication}: producers and consumers do not need to be active at the same time. Messages can be stored by the broker and delivered when consumers become available. 
+
+\item \textbf{Message Persistence}: distributed applications often require messages or events to survive temporary interruptions. The experiments analyse how RabbitMQ and Kafka store information and make it available for later consumption.
+
+\item \textbf{Consumer Recovery}: systems must be able to resume processing after temporary failures or disconnections. Several experiments investigate how messages are handled when consumers stop and subsequently reconnect.
+
+\item \textbf{Event Replay}: Kafka introduces the possibility of reprocessing previously generated events through offset management. This capability is analysed through replay experiments performed on stored event streams.
+
+\item \textbf{Scalability}: distributed systems frequently require the ability to increase
+processing capacity as workloads grow. The project examines architectural mechanisms
+related to workload distribution and scalability, including multiple consumers in
+RabbitMQ and consumer groups with topic partitioning in Kafka. These experiments
+illustrate how workloads can be distributed across multiple processing instances.
+
+\end{itemize}
+
+Although all experiments were executed on a single machine using Docker containers,
+both RabbitMQ and Apache Kafka are designed to operate within larger distributed
+environments. 
+
+\section{Requirements Analysis}\label{requirements}
+
+The objective of this project is not the development of a traditional end-user application, but rather the realization of a lightweight experimental environment for the comparative analysis of RabbitMQ and Apache Kafka. Consequently, the requirements focus on the capabilities that the platform must provide in order to support the study and validation of distributed messaging concepts.
+
+\subsection{Functional Requirements}
+
+\begin{itemize}
+
+\item \textbf{FR1 -- Asynchronous Message Exchange}
+
+The platform shall support asynchronous communication between producers and consumers using both RabbitMQ and Apache Kafka.
+
+\textbf{Acceptance Criterion:}
+Messages generated by a producer can be successfully delivered and consumed asynchronously through both messaging infrastructures.
+
+\item \textbf{FR2 -- Message Persistence Evaluation}
+
+The platform shall support the evaluation of message persistence mechanisms.
+
+\textbf{Acceptance Criterion:}
+Messages remain available after consumer or broker restarts whenever persistence mechanisms are enabled.
+
+\item \textbf{FR3 -- Fault Recovery Evaluation}
+
+The platform shall support the analysis of fault recovery mechanisms following consumer failures.
+
+\textbf{Acceptance Criterion:}
+Messages that have not been successfully processed before a consumer failure can be recovered and processed after the consumer is restarted.
+
+\item \textbf{FR4 -- Event Replay Evaluation}
+
+The platform shall support the analysis of event replay capabilities.
+
+\textbf{Acceptance Criterion:}
+Previously produced events can be consumed again by creating a new consumer group or by resetting the consumer position.
+
+\item \textbf{FR5 -- Parallel Message Processing Evaluation}
+
+The platform shall support experiments involving multiple consumers operating concurrently.
+
+\textbf{Acceptance Criterion:}
+The system demonstrates the distribution of work among multiple consumers or consumer groups.
+
+\item \textbf{FR6 -- Comparative Analysis Support}
+
+The platform shall support the execution of comparable experiments on both RabbitMQ and Apache Kafka.
+
+\textbf{Acceptance Criterion:}
+ Experimental scenarios addressing equivalent messaging concepts can be performed on both technologies, allowing their resulting behaviours to be compared.
+
+\end{itemize}
+
+\subsection{Non-Functional Requirements}
+
+\begin{itemize}
+
+\item \textbf{NFR1 -- Reproducibility}
+
+The experimental environment shall be reproducible on different machines.
+
+\textbf{Acceptance Criterion:}
+The complete infrastructure can be deployed using the provided configuration files and documentation.
+
+\item \textbf{NFR2 -- Reliability}
+
+The platform shall provide reliable experimental observations regarding message delivery and recovery.
+
+\textbf{Acceptance Criterion:}
+Repeated executions of the same experimental scenario produce consistent observable behaviour under the same configuration.
+
+\item \textbf{NFR3 -- Observability}
+
+The behaviour of the system shall be observable during experimentation.
+
+\textbf{Acceptance Criterion:}
+Message flows, queues, topics, consumer groups, and broker status can be inspected through logs and management interfaces.
+
+\item \textbf{NFR4 -- Maintainability}
+
+The experimental environment shall be easily extensible.
+
+\textbf{Acceptance Criterion:}
+New experiments can be added without requiring substantial modifications to the overall architecture.
+
+\end{itemize}
+
+\subsection{Implementation Requirements}
+
+\begin{itemize}
+
+\item \textbf{IR1 -- Containerized Deployment}
+
+The infrastructure shall be deployable through containerization technologies.
+
+\textbf{Acceptance Criterion:}
+All required services can be started through a Docker Compose configuration.
+
+\item \textbf{IR2 -- Python-based Experimental Clients}
+
+Experimental producers and consumers shall be implemented in Python.
+
+\textbf{Acceptance Criterion:}
+All experiments can be executed through Python applications.
+
+\item \textbf{IR3 -- Messaging Technologies}
+
+The experimental environment shall include both RabbitMQ and Apache Kafka.
+
+\textbf{Acceptance Criterion:}
+Experimental scenarios addressing comparable messaging concepts can be performed using both messaging platforms.
+
+\end{itemize}
+\subsection{Relevant Distributed System Features}
+\label{ds-features}
+
+
+\paragraph{Fault Tolerance and Dependability}
+
+Fault tolerance represents one of the central aspects
+of the analysis. Distributed systems must be able to handle failures affecting individual
+components while preserving the availability of messages and supporting recovery.
+RabbitMQ and Kafka provide different mechanisms for message persistence and recovery.
+RabbitMQ uses acknowledgements, durable queues, and message redelivery, whereas Kafka
+uses persistent logs, consumer offsets, and mechanisms that allow previously stored
+events to be consumed again. These mechanisms are examined through the persistence,
+broker recovery, consumer recovery, and event replay experiments.
+
+\paragraph{Scalability}
+
+The project investigates architectural mechanisms related to scalability rather than performing quantitative scalability measurements. RabbitMQ supports workload distribution through competing consumers, while Kafka provides consumer groups and topic partitioning. These mechanisms illustrate how workloads can be distributed across multiple processing instances as the number of consumers increases
+
+\paragraph{Openness and Interoperability}
+
+Openness and interoperability are important characteristics of both RabbitMQ and Apache
+Kafka. Both technologies provide well-documented interfaces, support multiple programming
+languages, and can be integrated into heterogeneous software environments.
+
+The experimental platform combines Docker containers, Python applications, RabbitMQ,
+and Apache Kafka. These components interact through standard communication interfaces
+and protocols, providing a practical example of how messaging systems can be integrated
+within a heterogeneous software environment.
+
+\paragraph{Concurrency and Parallel Processing}
+
+Concurrency is another important aspect explored through the experimental activities. Both RabbitMQ and Apache Kafka support concurrent message processing by multiple consumers, allowing workloads to be distributed across multiple consumer instances.
+
+The experiments investigate these mechanisms through multiple consumers, consumer groups, and partitioned topics. In RabbitMQ, concurrency is examined through the competing consumers pattern, in which messages from the same queue can be distributed among multiple consumers. In Kafka, partitions are assigned to consumers within the same consumer group, allowing messages from different partitions to be processed concurrently.
+
+
+\section{Design}\label{design}
+
+This chapter describes the architecture of the experimental environment developed to support the comparative analysis of RabbitMQ and Apache Kafka. The design aims to provide a reproducible and controlled setting in which the behaviour of both technologies can be observed through a series of practical experiments.
+
+\subsection{Architecture}
+
+The experimental environment follows an event-driven distributed architecture based on the \emph{Producer--Broker--Consumer} pattern.
+
+In this architectural style, producers generate messages or events without communicating directly with consumers. Instead, communication is mediated by a messaging broker responsible for receiving, storing, routing, and delivering messages. This approach promotes \emph{loose coupling} between communicating components, since producers and consumers interact only with the messaging infrastructure and do not require direct knowledge of each other.
+
+The adoption of this architectural model is consistent with the objectives of the project, as it provides a natural framework for observing asynchronous communication, message persistence, workload distribution, and consumer coordination.
+
+Conceptually, the architecture consists of three main components:
+
+\begin{itemize}
+\item \textbf{Producers}, responsible for generating messages or events;
+\item \textbf{Messaging Brokers}, responsible for mediating communication between producers and consumers;
+\item \textbf{Consumers}, responsible for receiving and processing messages.
+\end{itemize}
+
+Although RabbitMQ and Apache Kafka implement different communication models, both technologies can be analysed through this common architectural abstraction. This shared perspective facilitates a systematic comparison of their communication mechanisms, persistence strategies, approaches to workload distribution, and recovery capabilities.
+
+The architecture adopted for the experimental environment is intentionally simple. The objective is not to reproduce a production-scale distributed system, but rather to isolate and observe the fundamental behaviours of messaging infrastructures under controlled conditions. 
+
+
+\subsection{Infrastructure}\label{infrastructure}
+
+The infrastructure consists of several distributed components deployed through Docker Compose.
+
+The following infrastructural elements are included:
+
+\begin{itemize}
+\item RabbitMQ broker;
+\item Apache Kafka broker;
+\item RabbitMQ management interface;
+\item Producer applications;
+\item Consumer applications.
+\end{itemize}
+
+Although all components execute on the same physical machine during experimentation, RabbitMQ and Apache Kafka run in separate Docker containers, while the Python producer and consumer applications run directly on the host. The messaging services communicate through network interfaces, and the Python applications connect to the brokers through their configured network endpoints.
+
+Docker networking provides automatic service discovery between containers, allowing them to reference one another through service names defined in the Docker Compose configuration. Host-based applications, however, access the brokers through the corresponding exposed ports and configured addresses.
+
+The resulting infrastructure provides a lightweight and reproducible environment for examining the communication mechanisms of both messaging systems. Although it does not constitute a multi-host deployment, it allows key aspects of distributed messaging to be investigated in a controlled experimental setting.
+
+\subsection{Modelling}\label{modelling}
+
+The main domain entities considered in the project are:
+
+\begin{itemize}
+    \item Producer;
+    \item Consumer;
+    \item Message;
+    \item Broker;
+    \item Queue (RabbitMQ);
+    \item Topic (Kafka);
+    \item Partition (Kafka);
+    \item Consumer Group (Kafka).
+\end{itemize}
+
+Messages represent the primary units of communication exchanged between producers and consumers through the messaging infrastructure.
+
+The experiments examine different events associated with the message lifecycle and the operation of the messaging systems, including:
+
+\begin{itemize}
+    \item \textbf{Message Published}, when a producer sends a message to the messaging infrastructure;
+    \item \textbf{Message Stored}, when a message is persisted by the broker according to the configured storage mechanisms;
+    \item \textbf{Message Consumed}, when a consumer receives and processes a message;
+    \item \textbf{Consumer Started}, when a consumer application starts and begins interacting with the messaging infrastructure;
+    \item \textbf{Consumer Stopped}, when a consumer application terminates or disconnects from the messaging infrastructure;
+    \item \textbf{Broker Restarted}, when a broker is restarted after being stopped or interrupted;
+    \item \textbf{Offset Committed (Kafka)}, when a consumer commits its current reading position, allowing consumption to resume from the corresponding offset;
+    \item \textbf{Message Acknowledged (RabbitMQ)}, when a consumer acknowledges a message to the broker, indicating that the message has been handled and can be removed from the queue.
+\end{itemize}
+
+\subsection{Interaction}\label{interaction}
+
+Communication follows an asynchronous message-passing model.
+
+A producer generates a message and sends it to the broker. The broker stores and distributes the message according to the communication model adopted by the specific technology.
+
+Consumers receive and process messages independently of the producers. In RabbitMQ, messages are delivered to consumers through queues, whereas in Kafka, consumers read records from topics and their partitions.
+
+The principal interaction pattern is therefore:
+
+\begin{center}
+Producer $\rightarrow$ Broker $\rightarrow$ Consumer
+\end{center}
+
+Additional interactions depend on the messaging technology and include message acknowledgements in RabbitMQ, offset management in Kafka, consumer-group coordination, and recovery following consumer or broker failures.
+
+
+\subsection{Behaviour}
+
+Producers are largely stateless components whose primary responsibility is generating and publishing messages or events to the messaging infrastructure. Once a message has been transmitted, producers do not maintain additional state related to its processing.
+
+Consumers receive messages from queues or topics and process them. Depending on the underlying technology, successful processing may be confirmed through message acknowledgements (RabbitMQ) or offset commits (Kafka). Multiple consumers may operate simultaneously to support workload distribution and concurrent message processing.
+
+The messaging brokers represent the central components of the system. They manage message storage, coordinate message delivery, and maintain the information required to support persistence and recovery mechanisms. Although RabbitMQ and Apache Kafka implement these responsibilities differently, both act as intermediaries between producers and consumers.
+
+State changes occur when messages are published, stored, delivered, consumed, acknowledged, replayed, or removed from the system. Additional state transitions may occur when consumers join or leave the system, when offsets are committed, or when brokers recover after a restart.
+
+
+\subsection{Persistence and Data Management}
+
+No external database is required for this project, as both RabbitMQ and Apache Kafka provide their own mechanisms for storing messaging data.
+
+RabbitMQ stores messages within queues until they are consumed and acknowledged, whereas Kafka stores events in persistent topic partitions organised as append-only logs.
+
+\subsection{Fault-Tolerance}\label{fault-tolerance}
+
+RabbitMQ and Kafka adopt different approaches to reliability and recovery.
+
+RabbitMQ relies on:
+
+\begin{itemize}
+\item acknowledgements;
+\item durable queues;
+\item message redelivery.
+\end{itemize}
+
+Kafka relies on:
+
+\begin{itemize}
+\item persistent event logs;
+\item consumer offsets;
+\item replay mechanisms;
+\item consumer-group coordination.
+\end{itemize}
+
+
+\section{Implementation}
+
+This chapter describes the technology-dependent choices adopted to implement the experimental environment presented in Section~\ref{design}.
+
+The selected technologies were chosen because they are widely used in distributed systems, are straightforward to deploy in a local environment, and provide the functionality required to investigate messaging, persistence, scalability, and fault-tolerance mechanisms through practical experiments.
+
+
+\subsection{Communication Protocols}
+
+All communication within the experimental environment relies on TCP/IP networking.
+
+RabbitMQ uses the Advanced Message Queuing Protocol (AMQP), a standardized messaging protocol that supports message routing, acknowledgements, queue management, and reliable message delivery.
+
+Apache Kafka uses its own protocol built on top of TCP. The protocol is specifically designed for distributed event streaming and supports features such as topic partitioning, offset management, and high-throughput message exchange between clients and brokers.
+
+The protocol details are largely transparent to the implemented Python applications, which interact with the messaging systems through the official client libraries.
+
+\subsection{Message Representation}
+
+Messages exchanged during the experiments are represented as simple UTF-8 encoded text strings.
+
+Since the objective of the project is to analyse messaging mechanisms rather than payload structures, complex data formats were not required.
+
+More structured formats such as JSON or Protocol Buffers could be adopted in future extensions without affecting the communication models investigated.
+
+
+\subsection{Data Storage}
+
+No external database system was used in the experimental environment.
+
+\subsection{Technological Details}\label{technological-details}
+
+\paragraph{Docker and Docker Compose}
+
+Docker was adopted to containerize the messaging infrastructures and simplify the deployment of the experimental environment. Docker Compose was used to define and manage the services required for the experiments, including RabbitMQ and Apache Kafka. This approach simplifies setup and supports reproducibility across different machines.
+
+\paragraph{RabbitMQ}
+
+RabbitMQ was deployed using the official rabbitmq:3-management Docker image. The management edition provides a web-based administration interface that facilitates the inspection of queues, connections, consumers, and broker status during experimentation.
+
+\paragraph{Apache Kafka}
+
+Apache Kafka was deployed using the apache/kafka:latest Docker image. The broker was configured to accept connections from the Python applications running on the host machine through the exposed port. This configuration allows the experimental clients to interact with Kafka without running inside Docker containers.
+\paragraph{Python}
+
+Python was selected for implementing producers and consumers because of its simplicity, readability, and extensive ecosystem. The experimental applications consist of lightweight scripts responsible for publishing and consuming messages.
+
+\paragraph{Python Libraries}
+
+RabbitMQ clients were implemented using the pika library, while Kafka clients were implemented using the kafka-python library. Both libraries provide APIs that simplify interaction with the corresponding messaging infrastructures and support the implementation of the experimental scenarios.
+
+\paragraph{Version Control}
+
+Git and GitHub were used to manage source code, configuration files, and project documentation throughout development. Version control supports incremental development and helps maintain a traceable history of changes to the experimental environment.
+
+
+\section{Validation}\label{validation}
+
+\subsection{Experimental Methodology}
+
+The validation process was based on a series of practical experiments designed to investigate and compare the behaviour of RabbitMQ and Apache Kafka under different distributed-system scenarios.
+
+The experiments focused on asynchronous communication, message persistence, consumer recovery, event replay, workload distribution, and partition-based parallelism.
+
+For each experiment, execution steps, source code, and supporting documentation are provided in the accompanying project repository, allowing the validation process to be reproduced independently.
+
+\subsection{RabbitMQ Experiments}
+
+\subsubsection{R1 -- Asynchronous Messaging and Temporal Decoupling}
+
+\paragraph{Objective}
+
+To verify that RabbitMQ supports asynchronous communication by allowing producers and consumers to operate independently in time.
+
+\paragraph{Procedure}
+
+A producer published a message to a queue while no consumer was connected. A consumer was started afterwards and subscribed to the queue.
+
+\paragraph{Observed Result}
+
+The message remained stored by the broker and was delivered when the consumer became available.
+
+\paragraph{Validation}
+
+The experiment confirms RabbitMQ's support for asynchronous communication and temporal decoupling, validating Requirement FR1.
+
+\subsubsection{R2 -- Multiple Message Delivery}
+
+\paragraph{Objective}
+
+To verify RabbitMQ's ability to reliably deliver multiple messages published to the same queue.
+
+\paragraph{Procedure}
+
+A producer published a sequence of messages to a RabbitMQ queue. A consumer was then started to process all available messages.
+
+\paragraph{Observed Result}
+
+All published messages were successfully delivered and consumed. Messages were received in the same order in which they were published, demonstrating FIFO (First-In, First-Out) queue behaviour.
+
+\paragraph{Validation}
+
+The experiment validates Requirement FR1 and confirms RabbitMQ's ability to deliver multiple messages while preserving message ordering within a queue.
+
+\subsubsection{R3 -- Multiple Consumers}
+
+\paragraph{Objective}
+
+To investigate how RabbitMQ distributes messages among multiple consumers connected to the same queue.
+
+\paragraph{Procedure}
+
+Multiple consumers were connected to the same RabbitMQ queue. A producer then published a sequence of messages while all consumers remained active.
+
+\paragraph{Observed Result}
+
+The messages were distributed among the available consumers. Each message was delivered to a single consumer and was not duplicated.
+
+\paragraph{Validation}
+
+The experiment validates Requirement FR5 by demonstrating RabbitMQ's work-queue model and its ability to distribute messages among multiple concurrent consumers. Each message was delivered to a single consumer, with no duplication observed during the experiment.
+
+\subsubsection{R4A -- Non-Durable Queue}
+
+\paragraph{Objective}
+
+The objective of this experiment was to investigate RabbitMQ's behaviour when persistence mechanisms are not enabled.
+
+\paragraph{Procedure}
+
+A non-durable queue was created and populated with a set of messages. After confirming that the messages were stored within the queue, the RabbitMQ broker was stopped and restarted.
+
+\paragraph{Observed Result}
+
+After the broker restart, the queue was no longer available and all previously stored messages had been lost. Neither the queue definition nor its contents survived the restart procedure.
+
+\paragraph{Validation}
+
+The experiment demonstrates that non-durable queues provide no persistence guarantees. When persistence mechanisms are disabled, queues and messages exist only for the lifetime of the broker process. This experiment establishes a baseline for comparison with the durable configuration evaluated in Experiment R4.
+
+\subsubsection{R4 -- RabbitMQ Persistence}
+
+\paragraph{Objective}
+
+The objective of this experiment was to verify RabbitMQ's persistence capabilities through the use of durable queues and persistent messages.
+
+\paragraph{Procedure}
+
+A durable queue was created and populated with persistent messages. The RabbitMQ broker container was then restarted using docker restart.
+
+\paragraph{Observed Result}
+
+After the broker restart, both the queue and its messages remained available. Consumers were able to retrieve the previously published messages without requiring them to be republished.
+
+\paragraph{Validation}
+
+The experiment confirms RabbitMQ's persistence capabilities and validates Requirement FR2. By combining durable queues with persistent messages, previously stored data remains available after a broker restart, reducing the risk of message loss and improving system reliability.
+
+\subsubsection{R5 -- Message Recovery After Consumer Failure}
+
+\paragraph{Objective}
+The objective of this experiment was to evaluate RabbitMQ’s ability to recover from consumer failures by redelivering unacknowledged messages.
+
+\paragraph{Procedure}
+
+A consumer was configured to receive messages from a queue. During message processing, the consumer was intentionally interrupted before acknowledging the received message. The consumer was subsequently restarted and reconnected to the queue.
+
+\paragraph{Observed Result}
+
+The unacknowledged message remained available within the queue after the consumer failure. Once the consumer resumed operation, RabbitMQ redelivered the message, allowing it to be processed successfully. No message loss was observed during the experiment.
+
+\paragraph{Validation}
+
+The experiment validates Requirement FR3, demonstrating that unacknowledged messages are automatically redelivered after consumer failures.
+
+\subsection{Kafka Experiments}
+
+\subsubsection{K1 -- Basic Producer--Consumer Communication}
+
+\paragraph{Objective}
+
+To verify the basic communication workflow between Kafka producers and consumers through a topic.
+
+\paragraph{Procedure}
+
+A producer published events to a Kafka topic while a consumer subscribed to the same topic and listened for incoming events.
+
+\paragraph{Observed Result}
+
+The consumer successfully received all events published by the producer.
+
+\paragraph{Validation}
+
+The experiment confirms Kafka's publish-subscribe communication model and validates Requirement FR1. Producers and consumers communicate indirectly through topics managed by the broker, supporting asynchronous event exchange.
+
+\subsubsection{K2 -- Multiple Messages}
+
+\paragraph{Objective}
+
+To verify Kafka's ability to store and deliver multiple events published to the same topic.
+
+\paragraph{Procedure}
+
+A producer published a sequence of events to a Kafka topic. A consumer subscribed to the topic and processed all available events.
+
+\paragraph{Observed Result}
+
+All published events were successfully received and processed by the consumer.
+
+\paragraph{Validation}
+
+The experiment validates Requirement FR1 and confirms Kafka's ability to reliably store and distribute multiple events through its topic-based architecture.
+
+\subsubsection{K3 -- Multiple Consumers (Single Partition)}
+
+\paragraph{Objective}
+
+To investigate how Kafka distributes work among consumers belonging to the same consumer group when a topic contains only a single partition.
+
+\paragraph{Procedure}
+
+A topic with a single partition was created. Multiple consumers belonging to the same consumer group were connected to the topic, and a producer published a sequence of events.
+
+\paragraph{Observed Result}
+
+Only one consumer processed events, while the remaining consumers remained idle.
+
+\paragraph{Validation}
+
+The experiment confirms Kafka's partition-based consumption model and validates Requirement FR5. Within a consumer group, each partition can be assigned to only one consumer at a time. Consequently, the degree of parallelism depends on the number of available partitions rather than the number of consumers. This behaviour motivates the partition-based scalability experiment presented in K4.
+
+\paragraph{Experimental Observation}
+
+Kafka automatically created the topic testtopic when the producer first published an event. The automatically created topic used the broker default configuration and therefore contained a single partition. As a consequence, only one consumer within a consumer group could actively process messages. For subsequent experiments, topics were explicitly created with multiple partitions in order to investigate workload distribution and consumer parallelism.
+
+\subsubsection{K4 -- Multiple Consumers with Multiple Partitions}
+
+\paragraph{Objective}
+
+To investigate Kafka's scalability mechanisms by analysing how events are distributed among multiple consumers when a topic contains multiple partitions.
+
+\paragraph{Procedure}
+
+A topic with multiple partitions was created and multiple consumers belonging to the same consumer group were connected to it. A producer then published a sequence of events while consumer activity was monitored.
+
+\paragraph{Observed Result}
+
+Kafka automatically assigned partitions to different consumers within the same consumer group. Events were consumed concurrently by multiple consumers, demonstrating workload distribution based on partition assignment.
+
+\paragraph{Validation}
+
+The experiment validates Requirement FR5 by demonstrating Kafka's ability to distribute partitions among multiple consumers belonging to the same consumer group. This partition-based assignment enables concurrent event processing, while the achievable parallelism depends on the number of available partitions.
+
+\subsubsection{K5 -- Event Persistence and Consumer Offsets}
+
+\paragraph{Objective}
+
+To investigate Kafka's persistence model and the role of consumer offsets in tracking message consumption.
+
+\paragraph{Procedure}
+
+Events were published to a Kafka topic and consumed by a consumer belonging to a consumer group. Consumer activity and message consumption were observed during the experiment.
+
+\paragraph{Observed Result}
+
+The published events remained stored within the topic after being consumed. Kafka tracked the consumer's progress through offsets, which identified the consumer's position within the topic log. Consuming an event did not remove it from the topic; instead, the consumer progressed through the log while the events remained available according to the topic's retention configuration.
+\paragraph{Validation}
+
+The experiment confirms Kafka’s persistent log architecture and validates Requirements FR2 and FR4. Events remain available within the topic after consumption, while consumer offsets track each consumer group’s position in the log. By using a different consumer group, previously published events can be consumed again without being republished. This behaviour highlights the separation between event storage and consumer progress.
+
+\subsubsection{K6 -- Event Replay}
+
+\paragraph{Objective}
+
+To verify Kafka's ability to replay previously consumed events by resetting consumer offsets.
+
+\paragraph{Procedure}
+
+A set of events was published to a Kafka topic and consumed by a consumer belonging to a consumer group. After all events had been processed, the consumer offsets were reset and the consumer was restarted.
+
+\paragraph{Observed Result}
+
+The consumer successfully reprocessed events that had already been consumed. The events remained available within the topic and did not need to be republished.
+
+\paragraph{Validation}
+
+The experiment confirms Kafka's event replay capabilities and validates Requirement FR4. Because event storage is independent of consumer offsets, previously consumed events can be processed again whenever required. This behaviour enables use cases such as data recovery, auditing, event sourcing, and stream reprocessing.
+
+\subsubsection{K7 -- Broker Restart Persistence}
+
+\paragraph{Objective}
+
+To verify Kafka's ability to preserve events across broker restarts.
+
+\paragraph{Procedure}
+
+A set of events was published to a Kafka topic. The Kafka broker container was then restarted using docker restart kafka. After the restart, consumers attempted to access the previously published events.
+\paragraph{Observed Result}
+
+All previously published events remained available after the broker restart. Consumers were able to access the stored events without requiring them to be republished.
+
+\paragraph{Validation}
+
+The experiment confirms Kafka's persistence capabilities. Events stored within topic partitions remain available after broker restarts, reducing the risk of data loss and improving system reliability. This behaviour validates Requirement FR2.
+
+\subsubsection{K8 -- Consumer Failure Recovery}
+
+\paragraph{Objective}
+
+To evaluate Kafka’s ability to recover from consumer failures through offset management.
+
+\paragraph{Procedure}
+
+A consumer belonging to a consumer group processed events from a Kafka topic. During execution, the consumer was intentionally interrupted and subsequently restarted.
+
+\paragraph{Observed Result}
+
+After restarting, the consumer resumed processing from the last committed offset. The event that had been processed but not committed was consumed again, while the previously committed event was not reprocessed. The remaining events were then processed normally.
+
+\paragraph{Validation}
+
+The experiment confirms Kafka’s consumer recovery mechanism and validates Requirement FR3. By using manual offset commits, Kafka resumes consumption from the last committed offset after a consumer failure, allowing events whose offsets have not been committed to be consumed again.
+
+\subsection{Comparative Discussion}
+
+The performed experiments highlighted the different design philosophies adopted by RabbitMQ and Apache Kafka.
+
+RabbitMQ primarily focuses on reliable message delivery through queues, acknowledgements, and message redelivery mechanisms. This behaviour was particularly evident in the persistence and consumer-recovery experiments, where messages remained available until successful acknowledgement.
+
+Kafka, on the other hand, emphasises persistent event streams, consumer independence, event replay, and partition-based scalability. These characteristics emerged through the offset-management, replay, consumer-group, and partition-based experiments.
+
+Both technologies successfully support asynchronous communication and fault-tolerant message processing, although through substantially different architectural approaches. RabbitMQ is centred on message delivery and processing reliability, whereas Kafka is designed around long-lived event storage and scalable event consumption.
+
+\subsection{Acceptance Criteria Verification}
+
+The experimental activities were used to evaluate the functional and non-functional requirements identified in Chapter 2.
+
+The experiments demonstrated the following behaviours:
+
+\begin{itemize}
+\item Asynchronous communication between producers and consumers;
+\item Message persistence across broker restarts under the tested configurations;
+\item Recovery from consumer failures through message redelivery or offset management;
+\item Workload distribution among multiple consumers;
+\item Event replay through consumer offset management;
+\item Partition-based parallel processing in Kafka;
+\item Deployment of the experimental environment through Docker Compose.
+\end{itemize}
+
+Throughout the RabbitMQ experiments, the RabbitMQ Management UI was used to inspect queues, message counts, and broker status, providing additional support for the observation and interpretation of the experimental results.
+
+\section{Deployment}\label{deployment}
+
+The experimental environment was designed to be easily reproducible on different machines through containerization technologies. All infrastructural services are deployed using Docker Compose, while experimental producers and consumers are executed as Python applications.
+
+\subsection{Prerequisites}
+
+Before deploying the project, the following software must be installed:
+
+\begin{itemize}
+\item Docker (version 24.x or later);
+\item Docker Compose (version 2.x or later);
+\item Python 3.11 or later;
+\item pip package manager.
+\end{itemize}
+
+The Python applications also require the installation of the libraries used to interact with RabbitMQ and Apache Kafka. Depending on the implementation, the required packages can be installed through:
+
+\begin{verbatim}
+pip install pika kafka-python
+\end{verbatim}
+
+The exact software versions are not strictly required, but equivalent recent versions are recommended.
+
+\subsection{Repository Setup}
+
+The project repository can be obtained through Git:
+
+\begin{verbatim}
+git clone https://github.com/mara-pulighe/KafkaRabbitmq2026.git
+
+\end{verbatim}
+
+
+\subsection{Infrastructure Deployment}
+
+The messaging infrastructure is defined through a Docker Compose configuration.
+
+The deployment includes:
+
+\begin{itemize}
+\item RabbitMQ broker;
+\item Apache Kafka broker;
+\end{itemize}
+
+The infrastructure can be started through:
+
+\begin{verbatim}
+docker compose up -d
+\end{verbatim}
+
+The \texttt{-d} option starts all services in detached mode.
+
+The deployment is considered successful when all containers are reported as running:
+
+\begin{verbatim}
+docker ps
+\end{verbatim}
+
+Expected output includes containers similar to:
+
+\begin{itemize}
+\item rabbitmq
+\item kafka
+\end{itemize}
+
+\subsection{Management Interfaces}
+
+RabbitMQ provides a web-based management interface accessible at:
+
+\begin{verbatim}
+http://localhost:15672
+\end{verbatim}
+
+The management interface can be accessed using the default credentials (`guest` as both username and password) in the local configuration used for this project.
+This interface was used during the validation phase to inspect queues, message counts, consumers, and broker status. Kafka was inspected using command-line tools to examine topics, partitions, consumer groups, and offsets.
+Figure 3 shows the RabbitMQ management
+interface, while Figure 4 provides an
+example of Kafka topic and consumer group inspection through the
+command-line tools.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{rabbitmq_interface.png}
+    \caption{RabbitMQ Management Interface}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.9\textwidth]
+    {example_kafkareplay.png}
+    \caption{Example of Kafka topic and consumer group inspection.}
+\end{figure}
+
+\subsection{Running Experimental Clients}
+
+Producer and consumer applications can be executed directly through Python.
+
+Example producer execution:
+
+\begin{verbatim}
+python producer.py
+\end{verbatim}
+
+Example consumer execution:
+
+\begin{verbatim}
+python consumer.py
+\end{verbatim}
+
+Additional scripts were used to perform experiments involving persistence, replay, consumer recovery, and partition-based message processing.
+
+\subsection{Expected Outcome}
+
+After deployment, the user should be able to:
+\begin{itemize}
+\item produce messages through RabbitMQ and Kafka;
+\item consume messages from queues and topics;
+\item inspect RabbitMQ's state through its management interface and Kafka's state through command-line tools;
+\item execute all experimental scenarios described in the Validation chapter.
+\end{itemize}
+
+The deployment procedure provides a lightweight experimental environment suitable for analysing the behaviour of RabbitMQ and Apache Kafka in a distributed messaging context.
+
+\section{User Guide}
+\label{user-guide}
+
+This section describes how to reproduce the experiments presented throughout this report.
+
+The complete experimental environment, source code, and execution instructions are available in the project repository. Each experiment is documented individually and includes its objective, execution procedure, and the distributed-system concepts being investigated.
+
+\subsection{Environment Setup}
+
+Before executing the experiments, the deployment procedure described in \cref{deployment} must be completed successfully.
+
+The required services can be started using:
+
+\begin{verbatim}
+docker compose up -d
+\end{verbatim}
+
+Once the infrastructure is running, the messaging brokers and supporting services become available for experimentation.
+
+\subsection{Executing the Experiments}
+
+Experiments are organised into two categories:
+
+\begin{itemize}
+\item RabbitMQ experiments (R1--R5);
+\item Kafka experiments (K1--K8).
+\end{itemize}
+
+Each experiment is accompanied by a dedicated documentation file within the repository describing:
+
+\begin{itemize}
+\item the objective of the experiment;
+\item the execution procedure;
+\textbf{\item the distributed-system concepts being demonstrated.}
+\end{itemize}
+
+Users can reproduce the experiments by following the instructions provided in the corresponding experiment documentation.
+
+\subsection{Expected Learning Outcomes}
+
+By reproducing the experiments, users can observe several important distributed-system concepts, including:
+
+\begin{itemize}
+\item asynchronous communication;
+\item message persistence;
+\item consumer recovery;
+\item event replay;
+\item consumer groups;
+\item partition-based workload distribution;
+\item fault-tolerance mechanisms related to message persistence and consumer recovery.
+\end{itemize}
+
+These observations complement the theoretical discussion presented throughout the report and provide practical insight into the operational differences between RabbitMQ and Apache Kafka.
+
+
+\section{Self-evaluation}\label{self-evaluation}
+
+Working on this project allowed me to better understand how distributed messaging systems work in practice, complementing the theoretical concepts studied with hands-on experimentation. Before starting the project, I was familiar with the general concepts of message brokers and event-driven architectures. Implementing and testing both technologies helped me better understand their architectural differences, strengths, and limitations.
+
+One aspect that I particularly appreciated was the experimental approach adopted throughout the project. Several behaviours that initially appeared similar from a theoretical perspective became much clearer after direct observation. For example, the differences between queue-based messaging and event streaming, the role of consumer groups, the impact of partitioning on scalability, and the mechanisms used to recover from failures were easier to understand through experimentation than through documentation alone.
+
+The most challenging part of the project was configuring and troubleshooting the experimental environment. During development, several issues emerged related to Docker networking, broker configuration, topic management, and interactions between locally running services and containerized services. Resolving these problems required additional investigation and contributed significantly to my understanding of how distributed systems are deployed and operated in practice.
+
+One limitation of the project is that the experiments were conducted in a controlled, single-machine environment. Therefore, the observations reflect the behaviour of RabbitMQ and Apache Kafka under the specific configurations used in the experiments.
+
+Overall, I consider the project successful because it achieved its objective of comparing RabbitMQ and Apache Kafka through both theoretical analysis and practical experimentation. Most importantly, it provided valuable experience in designing, deploying, observing, and analysing distributed messaging systems in a controlled experimental environment.
+
+
+\section*{Disclaimer}
+
+During the preparation of this work, I used OpenAI ChatGPT as a support tool for discussing distributed-systems concepts, reviewing implementation choices, troubleshooting technical issues, and improving the structure of the report.
+
+All generated suggestions, explanations, and draft content were critically reviewed, validated and modified by the author. All experiments, configurations, and results presented in this report were independently implemented and verified.
+
+\section{Conclusions}
+
+This project explored the behaviour of two widely adopted messaging technologies, RabbitMQ and Apache Kafka, through the implementation of an experimental environment. The objective was not to identify a universally superior solution, but rather to analyse the architectural principles, communication models, and operational characteristics that distinguish the two platforms.
+
+The experiments highlighted the different design philosophies underlying RabbitMQ and Kafka. RabbitMQ proved suitable for traditional message-oriented middleware scenarios, where flexible routing mechanisms, acknowledgements, and queue-based communication are central requirements. Kafka, on the other hand, demonstrated the characteristics of an event-streaming architecture, particularly in scenarios involving persistent event storage, message replay, and partition-based message processing.
+
+The validation activities showed that both technologies provide mechanisms for message persistence and consumer recovery, although they implement these mechanisms through different architectural approaches. RabbitMQ relies on exchanges, queues, acknowledgements, and message redelivery, while Kafka uses persistent event logs, topics, partitions, and consumer offsets to manage event storage and consumption. The experiments also illustrated how multiple consumers can process messages concurrently, depending on the configuration and messaging model of each platform.
+
+Overall, the project provided practical insight into the challenges and trade-offs involved in distributed messaging systems. The implemented environment allowed the investigation of key concepts such as asynchronous communication, message persistence, consumer recovery, workload distribution, and event replay, providing a basis for comparing RabbitMQ and Apache Kafka under the tested configurations.
+
+
+The results of this comparative analysis show that the choice between RabbitMQ and Apache Kafka depends primarily on the requirements of the target application rather than on the intrinsic superiority of one technology over the other. RabbitMQ is well suited to applications that require flexible routing and queue-based message delivery. Kafka is well suited to event-driven applications that benefit from persistent event storage, replay capabilities, and partition-based processing. Consequently, the selection of the most appropriate messaging platform should be guided by the communication model, workload characteristics, and operational requirements of the system under development.
+
+
+\section{Real-World Applications}
+
+This section presents two real-world examples that illustrate how RabbitMQ and
+Apache Kafka are adopted in production environments. The objective is to relate
+the architectural characteristics discussed in the previous sections to practical
+industrial applications.
+
+\subsubsection{Apache Kafka: PayPal}
+
+PayPal provides a real-world example of Apache Kafka being used as a large-scale distributed event-streaming platform. Kafka was introduced at PayPal in 2015 and was progressively expanded to support the company's growing payment and data-processing workloads. It is used for several purposes, including application monitoring, database synchronization, log aggregation, batch processing, risk management, analytics, and compliance.
+
+The scale of PayPal's Kafka infrastructure has grown considerably over time. According to PayPal, the platform operates more than 1,500 Kafka brokers, over 20,000 topics, and more than 85 Kafka clusters. During Retail Friday 2022, it reached a peak of approximately 1.3 trillion messages per day, with an incoming rate of around 21 million messages per second. These figures illustrate how Kafka can support demanding workloads in a large production environment.
+
+To support this scale, PayPal operates multiple Kafka clusters across different data centres and security zones. A Kafka cluster consists of multiple brokers that cooperate to store and serve event data. Topics are divided into partitions, which can be distributed across brokers to support parallel processing and workload distribution. Partitions can also be replicated across brokers to improve data availability and support recovery in the event of a broker failure.
+
+PayPal uses Apache Kafka MirrorMaker to replicate data between clusters, supporting disaster recovery and communication across different environments. Reliability and availability are further supported by monitoring, replication, and controlled maintenance procedures. For example, PayPal reports using a replication factor of three for Kafka topics and checking for under-replicated partitions before performing broker maintenance.
+
+Managing an infrastructure of this size also requires additional tools and automation. PayPal has developed internal services for configuration management, monitoring, access control, topic creation, and partition reassignment. These mechanisms help simplify cluster operations, manage security requirements, and reduce the risks associated with maintenance and infrastructure changes.
+
+The PayPal case study illustrates that deploying Kafka at large scale requires not only the messaging platform itself, but also supporting mechanisms for monitoring, security, replication, and operational automation. It provides a broader context for understanding concepts such as topics, partitions, consumer groups, and message persistence, which are also relevant to this project. However, the PayPal infrastructure is considerably more complex than the single-broker environment used in the experiments. 
+
+\subsubsection{Rabbit MQ: Bloomberg}
+Bloomberg uses RabbitMQ as part of its infrastructure for financial applications. One example is the Derivatives Market Data team, which uses RabbitMQ to support communication between microservices handling a large number of requests from enterprise clients. The system must route financial data requests across multiple service deployments while accommodating a complex and continuously changing application environment.
+
+RabbitMQ was selected for its exchange-based routing capabilities. In particular, topic exchanges allow applications to publish messages using routing keys, while the broker routes messages to the appropriate queues according to the configured binding patterns. This approach helps decouple applications from the underlying service infrastructure and supports flexible message routing.
+
+The architecture also supports workload distribution by allowing multiple gateways and consumers to process requests. Bloomberg reports substantial message volumes, including more than 200 million messages published per week and peaks of tens of thousands of messages per second. 
+
+Another important challenge concerns messages that repeatedly fail during processing, commonly referred to as ``poison messages''. RabbitMQ can redeliver unacknowledged messages when a consumer fails, but repeated redelivery may cause the same problematic message to be processed multiple times and affect other consumers.
+
+To address this issue, Bloomberg developed an additional mechanism using Redis, an in-memory data store commonly used for caching and fast data access, to track the number of times a message had been redelivered. Each message is associated with a unique identifier, and its redelivery counter is stored in Redis together with a time-to-live (TTL), which determines how long the counter is retained. When a message exceeds a predefined threshold, the application acknowledges it before further processing, preventing repeated redelivery of that message.
+
+The Bloomberg case study illustrates how RabbitMQ can support flexible routing and message processing in a demanding production environment. It also shows that application-specific mechanisms may be needed to handle problematic messages and prevent repeated failures. These concepts are relevant to this project, particularly the experiments involving topic-independent queue delivery, competing consumers, acknowledgements, and message redelivery. 
+
+\section{Future Work}
+
+Although the experimental environment developed in this project allowed several important distributed-system concepts to be investigated, a number of aspects remain open for further study.
+
+One possible extension would be to introduce quantitative performance evaluations. The present work focused primarily on architectural and behavioural aspects rather than performance measurements. Future experiments could compare throughput, latency, resource utilisation, and processing performance under increasing workloads. Different numbers of producers and consumers could also be tested to investigate how workload distribution changes as the number of concurrent clients increases.
+
+Another direction would be to investigate additional distributed-system concepts, including consistency guarantees, leader election, and coordination mechanisms. These topics would extend the analysis beyond messaging and provide a broader understanding of how distributed systems coordinate their components and respond to failures.
+
+The experimental framework could also be extended to include additional messaging technologies and event-streaming platforms. Comparing these alternatives with RabbitMQ and Apache Kafka would help determine whether the behaviours observed in this project also apply to other architectures and communication models.
+
+Finally, future work could explore the use of RabbitMQ and Kafka in application domains such as microservice architectures, IoT platforms, monitoring infrastructures, and data-processing pipelines. 
+
+\bibliographystyle{plain}
+\begin{thebibliography}{99}
+
+% Official documentation
+
+\bibitem{rabbitmq-docs}
+RabbitMQ,
+\textit{RabbitMQ Documentation},
+RabbitMQ, 
+\url{https://www.rabbitmq.com/docs/}.
+
+
+\bibitem{kafka-docs}
+Apache Software Foundation,
+\textit{Apache Kafka Documentation},
+\url{https://kafka.apache.org/documentation/}.
+
+\bibitem{kleppmann2017}
+Martin Kleppmann,
+\textit{Designing Data-Intensive Applications},
+O'Reilly Media, 2017.
+\bibitem{coulouris2011}
+George Coulouris, Jean Dollimore, Tim Kindberg, and Gordon Blair,
+\textit{Distributed Systems: Concepts and Design},
+5th ed., Addison-Wesley, 2011.
+\bibitem{cloudamqp-rabbitmq-beginners}
+CloudAMQP,
+\textit{Part 1: RabbitMQ for Beginners -- What Is RabbitMQ?},
+last updated October 22, 2025.
+\url{https://www.cloudamqp.com/blog/part1-rabbitmq-for-beginners-what-is-rabbitmq/}.
+% Comparison
+
+\bibitem{cloudamqp-comparison}
+CloudAMQP,
+\textit{When to use RabbitMQ or Apache Kafka},
+2025,
+\url{https://www.cloudamqp.com/blog/when-to-use-rabbitmq-or-apache-kafka.html}.
+
+
+% Real-world case studies
+
+\bibitem{case rabbit mq}
+
+CloudAMPQ,
+\textit{Keynote: Growing a Farm of Rabbits To Scale Financial Apps}, 2019.
+\url{https://www.cloudamqp.com/blog/growing-a-farm-of-rabbits.html}
+
+\bibitem{case apache kafka}
+Paypal Community Blog,
+\textit{Scaling Kafka to Support PayPal’s Data Growth},
+[Year],
+\url{https://developer.paypal.com/community/blog/scaling-kafka-to-support-paypals-data-growth/}
+
+
+\end{thebibliography}
+
+\end{document}
+
