@@ -8,6 +8,7 @@ This directory contains the procedures used to reproduce all experiments discuss
 - R2 – Multiple Message Delivery
 - R3 – Multiple Consumers
 - R4 – Message Persistence
+- R4A - Non-Durable Queue Behaviour
 - R5 – Consumer Recovery
 
 ## Kafka
